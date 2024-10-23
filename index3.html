@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pitch Stats</title>
+    <style>
+        .blue {
+            color: #0C2340;
+        }
+        .red {
+            color: #BD1F2D;
+        }
+        th {
+            border-bottom: 1px solid gray;
+            font-weight: bold;
+            font-size: 1.2em;
+            cursor: pointer;
+        }
+        th.sorted-asc::after {
+            content: ' ▲';
+        }
+        th.sorted-desc::after {
+            content: ' ▼';
+        }
+        a {
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .summary {
+            font-weight: bold;
+            background-color: #e9e9e9;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="red">Trackman Pitch Stats Viewer</h1>
+    <form onsubmit="filterData(event);">
+        <label>Starting date</label>
+        <input type="date" id="startdate">
+        <label>End date</label>
+        <input type="date" id="enddate">
+        <button type="submit">Filter</button>
+    </form>
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th onclick="sortTable(0)">ID</th>
+                <th onclick="sortTable(1)">Speed</th>
+                <th onclick="sortTable(2)">Result</th>
+                <th onclick="sortTable(3)">Datetime</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Data will be populated here -->
+        </tbody>
+        <tfoot>
+            <tr class="summary">
+                <td colspan="1">Statistics</td>
+                <td id="meanSpeed"></td>
+                <td id="medianSpeed"></td>
+                <td id="modeSpeed"></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <script>
+        function filterData(event) {
+            event.preventDefault();
+            var startdate = new Date(document.getElementById("startdate").value);
+            var enddate = new Date(document.getElementById("enddate").value);
+            const rows = document.querySelectorAll('#dataTable tbody tr');
+
+            rows.forEach(row => {
+                const dateCell = row.cells[3]; // Assuming the date is in the 4th column
+                const rowDate = new Date(dateCell.textContent);
+                row.style.display = (rowDate >= startdate && rowDate <= enddate) ? '' : 'none';
+            });
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch('https://compute.samford.edu/zohauth/clients/datajson');
+                const data = await response.json();
+                populateTable(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        function populateTable(data) {
+            const tableBody = document.getElementById('dataTable').querySelector('tbody');
+            tableBody.innerHTML = ''; // Clear any existing rows
+
+            const speeds = []; // Array to store speed values for calculations
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+
+                const cellId = document.createElement('td');
+                cellId.innerHTML = `<a href="details.html?id=${item.id}">Pitch ${item.id}</a>`;
+                row.appendChild(cellId);
+
+                const cellSpeed = document.createElement('td');
+                const speedValue = item.speed || 0;
+                cellSpeed.textContent = speedValue;
+                speeds.push(speedValue);
+                row.appendChild(cellSpeed);
+
+                const cellResult = document.createElement('td');
+                cellResult.textContent = item.result || '--';
+                row.appendChild(cellResult);
+
+                const cellDatetime = document.createElement('td');
+                cellDatetime.textContent = item.datetime || '--';
+                row.appendChild(cellDatetime);
+
+                tableBody.appendChild(row);
+            });
+
+            // Calculate statistics and display them
+            calculateStatistics(speeds);
+        }
+
+        function calculateStatistics(speeds) {
+            const mean = speeds.reduce((a, b) => a + b, 0) / speeds.length;
+            const median = getMedian(speeds);
+            const mode = getMode(speeds);
+
+            document.getElementById('meanSpeed').textContent = mean.toFixed(2);
+            document.getElementById('medianSpeed').textContent = median.toFixed(2);
+            document.getElementById('modeSpeed').textContent = mode.join(', ');
+        }
+
+        function getMedian(values) {
+            values.sort((a, b) => a - b);
+            const mid = Math.floor(values.length / 2);
+            return values.length % 2 !== 0 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+        }
+
+        function getMode(values) {
+            const frequency = {};
+            values.forEach(value => {
+                frequency[value] = (frequency[value] || 0) + 1;
+            });
+
+            const maxFrequency = Math.max(...Object.values(frequency));
+            return Object.keys(frequency).filter(key => frequency[key] === maxFrequency);
+        }
+
+        let currentSortColumn = -1;
+        let currentSortOrder = 'asc';
+
+        function sortTable(columnIndex) {
+            const table = document.getElementById("dataTable");
+            const rows = Array.from(table.rows).slice(1); // Skip header row
+            const isAscending = currentSortColumn === columnIndex && currentSortOrder === 'asc';
+
+            rows.sort((a, b) => {
+                const aText = a.cells[columnIndex].textContent;
+                const bText = b.cells[columnIndex].textContent;
+
+                return isAscending ? aText.localeCompare(bText) : bText.localeCompare(aText);
+            });
+
+            // Update table rows
+            rows.forEach(row => table.appendChild(row));
+
+            // Update sorting state
+            currentSortColumn = columnIndex;
+            currentSortOrder = isAscending ? 'desc' : 'asc';
+
+            // Update header styles
+            const headers = table.querySelectorAll('th');
+            headers.forEach(header => {
+                header.classList.remove('sorted-asc', 'sorted-desc');
+            });
+            headers[columnIndex].classList.add(isAscending ? 'sorted-desc' : 'sorted-asc');
+        }
+
+        // Fetch data on page load
+        fetchData();
+    </script>
+</body>
+</html>
